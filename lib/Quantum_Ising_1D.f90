@@ -9,7 +9,6 @@ module Quantum_Ising_1D
     integer, parameter :: boundary_conditions_flag = 1
     integer :: number_sites, total_sites, tot_Hilbert_elem, nev, ncv, ldv, nnz
     logical, allocatable :: comput_base(:,:)
-
     real(8),allocatable :: val_arr(:)
     integer(8),allocatable :: col_arr(:), row_arr(:)
 
@@ -126,6 +125,7 @@ module Quantum_Ising_1D
     !     %-------------------------%
 
         allocate(lancz_basis_matrix(ldv,ncv)) 
+        allocate(row_arr(nnz),col_arr(nnz),val_arr(nnz))
         length_workl = ncv*(ncv+8)
         allocate(workl(length_workl))
         allocate(workd(3*tot_Hilbert_elem))
@@ -133,7 +133,6 @@ module Quantum_Ising_1D
         allocate(ax(tot_Hilbert_elem))
         allocate(select(ncv)) 
 
-        allocate(row_arr(nnz),col_arr(nnz),val_arr(nnz))
     end subroutine Initialize_Quantum_Ising
 
 
@@ -308,7 +307,8 @@ module Quantum_Ising_1D
         real(8), intent(in) :: evector (len_evector)   
         real(8), intent(out) :: long_magnetiz
         
-        integer :: sum_expect_val_sigma_z, i_row, j_col
+        integer :: i_row, j_col
+        real(8):: sum_expect_val_sigma_z
 
         do i_row=1, tot_Hilbert_elem
             sum_expect_val_sigma_z = 0
@@ -324,7 +324,6 @@ module Quantum_Ising_1D
         end do
         long_magnetiz = long_magnetiz / total_sites
 
-    
     end subroutine get_long_magnetiz
 
 
@@ -335,8 +334,8 @@ module Quantum_Ising_1D
         real(8), intent(in) :: evector(len_evector)
         real(8), intent(out) :: trans_magnetiz
 
+        integer :: i_row, j_col
         real(8) :: sum_trans_coeff_i
-        integer ::  i_row, j_col
 
         do i_row=1, tot_Hilbert_elem
             sum_trans_coeff_i = 0
@@ -474,7 +473,7 @@ module Quantum_Ising_1D
                 !       | the input, and return the result to  |
                 !       | workd(ipntr(2)).                     |
                 !       %--------------------------------------%
-                
+
                 stat = mkl_sparse_d_mv(SPARSE_OPERATION_NON_TRANSPOSE, 1.d0, sp_matrix, &
                 descr_sp_matrix, workd(ipntr(1)), 0.d0, workd(ipntr(2))) 
 
@@ -486,6 +485,7 @@ module Quantum_Ising_1D
                 
             end if
         end do
+        
         !     %----------------------------------------%
         !     | Either we have convergence or there is |
         !     | an error.                              |
@@ -514,6 +514,7 @@ module Quantum_Ising_1D
         
         !ALL computes NEV eigenvector, "S" computes only the ones specified by the array select
         !The firs v contains the vector B-Orthonormal in case of Generalized eigenvalues
+        
         call dseupd ( rvec, 'All', select, eval_array, lancz_basis_matrix, ldv, sigma,&
         &         Bmat, tot_Hilbert_elem, which_eval, nev, tol, resid, ncv, lancz_basis_matrix, ldv,&
         &         iparam, ipntr, workd, workl, length_workl, ierr ) 
@@ -528,6 +529,7 @@ module Quantum_Ising_1D
         !         | invariant subspace corresponding to the      |
         !         | eigenvalues in D is returned in V.           |
         !         %----------------------------------------------%
+        
         if ( ierr .ne. 0) then
             print*, 'error in diagonalization dseupd', ierr
             stop
