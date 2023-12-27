@@ -6,12 +6,12 @@ program main_program_fortran
     real(8) :: trans_magnet_field, long_magnet_field, long_magnetiz, trans_magnetiz
     real(8), allocatable :: eval_arr(:), evec_matrix(:,:)
 
-    number_sites = 19
+    number_sites = 22
     nev = 1
     ncv = 10
 
-    long_magnet_field = 0
-    trans_magnet_field = 1.1
+    long_magnet_field = 0.d0
+    trans_magnet_field = 1.1d0
 
     print *, 'IF YOU COMPILE WITH INTEL, TRUE=-1.'
     print *, 'THIS PROGRAM RELIES ON INTEL UGLY CONVENTION'

@@ -80,7 +80,9 @@ module Quantum_Ising_1D
     subroutine Initialize_Quantum_Ising(number_sites_external, nev_external, ncv_external)
         implicit none
         integer, intent(in) :: number_sites_external, nev_external, ncv_external
-        integer :: i_row, j_col, i_holder ! j_holder
+        integer :: i_row, j_col
+        !integer :: i_holder !row major
+        integer :: j_holder !column major
 
         number_sites = number_sites_external
         nev = nev_external
@@ -94,29 +96,29 @@ module Quantum_Ising_1D
         !Inizializing all indipendent configuration of Hilbert Space.
 
         ! %-----------------------------------------------------%
-        ! |             OPTIMIZATION TURNED OFF                 |    
+        ! |             OPTIMIZATION TURNED ON                  |    
         ! |                  (TRANSPOSITION)                    |
         ! | column major language, comput_base has consecutive  |
         ! | calls on adjacent sites, not hilbert states         |
         ! %-----------------------------------------------------%
-       
-        ! allocate(comput_base(total_sites, tot_Hilbert_elem)) !! TRASPOSE FROM C++
-        ! j_holder = 0
-        ! do j_col = 1, tot_Hilbert_elem !column major language
-        !     j_holder = j_col
-        !     do i_row = 1, total_sites
-        !         comput_base(i_row, j_col) = MOD(j_holder,2)
-        !         j_holder = j_holder/2
+
+        ! allocate(comput_base(tot_Hilbert_elem, total_sites)) ! row major
+        ! i_holder = 0
+        ! do i_row = 1, tot_Hilbert_elem
+        !     i_holder = i_row - 1
+        !     do j_col = 1, total_sites
+        !         comput_base(i_row, j_col) = MOD(i_holder,2)
+        !         i_holder = i_holder/2
         !     end do
         ! end do
 
-        allocate(comput_base(tot_Hilbert_elem, total_sites)) !! SAME AS C++
-        i_holder = 0
-        do i_row = 1, tot_Hilbert_elem
-            i_holder = i_row - 1
-            do j_col = 1, total_sites
-                comput_base(i_row, j_col) = MOD(i_holder,2)
-                i_holder = i_holder/2
+        allocate(comput_base(total_sites, tot_Hilbert_elem)) ! column major
+        j_holder = 0
+        do j_col = 1, tot_Hilbert_elem !column major language
+            j_holder = j_col - 1
+            do i_row = 1, total_sites
+                comput_base(i_row, j_col) = MOD(j_holder,2)
+                j_holder = j_holder/2
             end do
         end do
 
@@ -140,7 +142,8 @@ module Quantum_Ising_1D
         implicit none
         real(8), intent(in) :: long_magnet_field, trans_magnet_field
         integer :: i_row, j_col !indices for computational base we are scrolling through.
-        integer :: new_i_row    !index for non diagonal elements of sp_matrix.
+        !integer :: new_i_row    !index for non diagonal elements of sp_matrix. row major
+        integer :: new_j_col    !index for non diagonal elements of sp_matrix. column major
         integer :: index_holder
         integer :: stat, try           
         stat = 0                !If altered an error occurred
@@ -209,29 +212,58 @@ module Quantum_Ising_1D
         !   |   (Sigma_(z) * Sigma_(z+1)) coupling  |
         !   %---------------------------------------%
 
-        do i_row=1, tot_Hilbert_elem
-            col_arr(i_row) = i_row
-            row_arr(i_row) = i_row
-            do j_col=1, total_sites-1
+        ! do i_row=1, tot_Hilbert_elem ! Row major
+        !     col_arr(i_row) = i_row
+        !     row_arr(i_row) = i_row
+        !     do j_col=1, total_sites-1
 
-                if (comput_base(i_row, j_col) == comput_base(i_row, j_col+1)) then
-                    val_arr(i_row) = val_arr(i_row) - 1.d0
+        !         if (comput_base(i_row, j_col) == comput_base(i_row, j_col+1)) then
+        !             val_arr(i_row) = val_arr(i_row) - 1.d0
+        !         else
+        !             val_arr(i_row) = val_arr(i_row) + 1.d0
+        !         end if
+
+        !     end do
+        ! end do
+
+        do j_col=1, tot_Hilbert_elem ! column major
+            col_arr(j_col) = j_col
+            row_arr(j_col) = j_col
+            do i_row=1, total_sites-1
+
+                if (comput_base(i_row, j_col) == comput_base(i_row+1, j_col)) then
+                    val_arr(j_col) = val_arr(j_col) - 1.d0
                 else
-                    val_arr(i_row) = val_arr(i_row) + 1.d0
+                    val_arr(j_col) = val_arr(j_col) + 1.d0
                 end if
 
             end do
         end do
 
-        if (boundary_conditions_flag==1) then
-            do i_row=1, tot_Hilbert_elem
-                ! col_arr(i_row) = i_row
-                ! row_arr(i_row) = i_row
 
-                if (comput_base(i_row, total_sites) == comput_base(i_row, 1)) then
-                    val_arr(i_row) = val_arr(i_row) - 1.d0
+        ! if (boundary_conditions_flag==1) then ! row major
+        !     do i_row=1, tot_Hilbert_elem
+        !         ! col_arr(i_row) = i_row
+        !         ! row_arr(i_row) = i_row
+
+        !         if (comput_base(i_row, total_sites) == comput_base(i_row, 1)) then
+        !             val_arr(i_row) = val_arr(i_row) - 1.d0
+        !         else
+        !             val_arr(i_row) = val_arr(i_row) + 1.d0
+        !         end if
+
+        !     end do
+        ! end if
+
+        if (boundary_conditions_flag==1) then ! column major
+            do j_col=1, tot_Hilbert_elem
+                ! col_arr(j_col) = j_col
+                ! row_arr(j_col) = j_col
+
+                if (comput_base(total_sites, j_col) == comput_base(1, j_col)) then
+                    val_arr(j_col) = val_arr(j_col) - 1.d0
                 else
-                    val_arr(i_row) = val_arr(i_row) + 1.d0
+                    val_arr(j_col) = val_arr(j_col) + 1.d0
                 end if
 
             end do
@@ -242,15 +274,29 @@ module Quantum_Ising_1D
         !   |   Longitudinal Field  |
         !   %-----------------------%
 
-        do i_row=1, tot_Hilbert_elem
-            ! col_arr(i_row) = i_row
-            ! row_arr(i_row) = i_row
+        ! do i_row=1, tot_Hilbert_elem ! row major
+        !     ! col_arr(i_row) = i_row
+        !     ! row_arr(i_row) = i_row
 
-            do j_col=1, total_sites
-                val_arr(i_row) = val_arr(i_row) + (1+2*comput_base(i_row, j_col)) * long_magnet_field
+        !     do j_col=1, total_sites
+        !         val_arr(i_row) = val_arr(i_row) + (1+2*comput_base(i_row, j_col)) * long_magnet_field
+        !     end do
+        !     ! if comput_base(i_row, j_col) == 1 then
+        !     !     sp_matrix(i_row, j_col) = sp_matrix(i_row, j_col) - 1
+        !     ! else 
+        !     !     sp_matrix(i_row, j_col) = sp_matrix(i_row, j_col) + 1
+        !     ! end if
+        ! end do
+
+        do j_col=1, tot_Hilbert_elem ! column major
+            ! col_arr(j_col) = j_col
+            ! row_arr(j_col) = j_col
+
+            do i_row=1, total_sites
+                val_arr(j_col) = val_arr(j_col) + (1+2*comput_base(i_row, j_col)) * long_magnet_field
             end do
             ! if comput_base(i_row, j_col) == 1 then
-            !     sp_matrix(i_row, j) = sp_matrix(i_row, j_col) - 1
+            !     sp_matrix(i_row, j_col) = sp_matrix(i_row, j_col) - 1
             ! else 
             !     sp_matrix(i_row, j_col) = sp_matrix(i_row, j_col) + 1
             ! end if
@@ -263,13 +309,29 @@ module Quantum_Ising_1D
         !   |   Transverse Field  |
         !   %---------------------%
 
-        do i_row=1, tot_Hilbert_elem
-            do j_col=1, total_sites
-                index_holder = index_holder + 1
-                new_i_row = i_row + (1+2*comput_base(i_row, j_col)) * 2**(j_col-1)
+        ! do i_row=1, tot_Hilbert_elem ! row major
+        !     do j_col=1, total_sites
+        !         index_holder = index_holder + 1
+        !         new_i_row = i_row + (1+2*comput_base(i_row, j_col)) * 2**(j_col-1)
 
-                col_arr(index_holder) = i_row
-                row_arr(index_holder) = new_i_row
+        !         col_arr(index_holder) = i_row
+        !         row_arr(index_holder) = new_i_row
+        !         val_arr(index_holder) = - trans_magnet_field ! val_arr(index_holder) - trans_magnet_field they do not overlap
+        !     end do
+        !     ! if comput_base(i_row, j_col) == 1 then
+        !     !     new_i_row = i_row - 2**(j_col-1)
+        !     ! else 
+        !     !     new_i_row = i_row + 2**(j_col-1)
+        !     ! end if
+        ! end do     
+
+        do j_col=1, tot_Hilbert_elem ! column major
+            do i_row=1, total_sites
+                index_holder = index_holder + 1
+                new_j_col = j_col + (1+2*comput_base(i_row, j_col)) * 2**(i_row-1)
+
+                col_arr(index_holder) = j_col
+                row_arr(index_holder) = new_j_col
                 val_arr(index_holder) = - trans_magnet_field ! val_arr(index_holder) - trans_magnet_field they do not overlap
             end do
             ! if comput_base(i_row, j_col) == 1 then
@@ -279,10 +341,18 @@ module Quantum_Ising_1D
             ! end if
         end do     
 
-        ! I tried to print all the values, they work.
 
-        ! do i_row=1, tot_Hilbert_elem
+        ! printing stuff
+
+        ! do i_row=1, tot_Hilbert_elem ! row major
         !     do j_col=1, total_sites
+        !         print *, comput_base(i_row, j_col)
+        !     end do
+        !     print *, ' '
+        ! end do 
+
+        ! do j_col=1, tot_Hilbert_elem ! column major
+        !     do i_row=1, total_sites
         !         print *, comput_base(i_row, j_col)
         !     end do
         !     print *, ' '
@@ -310,9 +380,23 @@ module Quantum_Ising_1D
         integer :: i_row, j_col
         real(8):: sum_expect_val_sigma_z
 
-        do i_row=1, tot_Hilbert_elem
+        ! do i_row=1, tot_Hilbert_elem ! row major
+        !     sum_expect_val_sigma_z = 0
+        !     do j_col=1, total_sites
+        !         sum_expect_val_sigma_z = sum_expect_val_sigma_z + 1+2*comput_base(i_row, j_col)
+        !         ! if comput_base(i_row, j_col) == 0 then
+        !         !     sum_expect_val_sigma_z = sum_expect_val_sigma_z + 1
+        !         ! else
+        !         !     sum_expect_val_sigma_z = sum_expect_val_sigma_z - 1
+        !         ! end if
+        !     end do
+        !     long_magnetiz = long_magnetiz + evector(i_row)**2 * abs(sum_expect_val_sigma_z)
+        ! end do
+        ! long_magnetiz = long_magnetiz / total_sites
+
+        do j_col=1, tot_Hilbert_elem ! column major
             sum_expect_val_sigma_z = 0
-            do j_col=1, total_sites
+            do i_row=1, total_sites
                 sum_expect_val_sigma_z = sum_expect_val_sigma_z + 1+2*comput_base(i_row, j_col)
                 ! if comput_base(i_row, j_col) == 0 then
                 !     sum_expect_val_sigma_z = sum_expect_val_sigma_z + 1
@@ -320,7 +404,7 @@ module Quantum_Ising_1D
                 !     sum_expect_val_sigma_z = sum_expect_val_sigma_z - 1
                 ! end if
             end do
-            long_magnetiz = long_magnetiz + evector(i_row)**2 * abs(sum_expect_val_sigma_z)
+            long_magnetiz = long_magnetiz + evector(j_col)**2 * abs(sum_expect_val_sigma_z)
         end do
         long_magnetiz = long_magnetiz / total_sites
 
@@ -337,12 +421,21 @@ module Quantum_Ising_1D
         integer :: i_row, j_col
         real(8) :: sum_trans_coeff_i
 
-        do i_row=1, tot_Hilbert_elem
+        ! do i_row=1, tot_Hilbert_elem ! row major
+        !     sum_trans_coeff_i = 0
+        !     do j_col=1, total_sites
+        !         sum_trans_coeff_i = sum_trans_coeff_i + evector(i_row + (1+2*comput_base(i_row, j_col)) * 2**(j_col-1))
+        !     end do
+        !     trans_magnetiz = trans_magnetiz + evector(i_row) * sum_trans_coeff_i
+        ! end do
+        ! trans_magnetiz = trans_magnetiz / total_sites
+
+        do j_col=1, tot_Hilbert_elem ! column major
             sum_trans_coeff_i = 0
-            do j_col=1, total_sites
-                sum_trans_coeff_i = sum_trans_coeff_i + evector(i_row + (1+2*comput_base(i_row, j_col)) * 2**(j_col-1))
+            do i_row=1, total_sites
+                sum_trans_coeff_i = sum_trans_coeff_i + evector(j_col + (1+2*comput_base(i_row, j_col)) * 2**(i_row-1))
             end do
-            trans_magnetiz = trans_magnetiz + evector(i_row) * sum_trans_coeff_i
+            trans_magnetiz = trans_magnetiz + evector(j_col) * sum_trans_coeff_i
         end do
         trans_magnetiz = trans_magnetiz / total_sites
 
